@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+
+contract LiquidityPool {
+    using SafeMath for uint256;
+
+    address public owner;
+    IERC20 public tokenA;
+    IERC20 public tokenB;
+
+    uint256 public totalLiquidity;
+    mapping(address => uint256) public userLiquidity;
+
+    event LiquidityAdded(address indexed provider, uint256 liquidityAmount);
+    event LiquidityRemoved(address indexed provider, uint256 liquidityAmount);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Unauthorized: Only the owner can call this function");
+        _;
+    }
+
+    constructor(address _tokenA, address _tokenB) {
+        owner = msg.sender;
+        tokenA = IERC20(_tokenA);
+        tokenB = IERC20(_tokenB);
+    }
+
+    function provideLiquidity(uint256 amountA, uint256 amountB) external {
+        require(amountA > 0 && amountB > 0, "Invalid liquidity amount");
+
+        require(tokenA.allowance(msg.sender, address(this)) >= amountA, "Insufficient allowance for tokenA");
+        require(tokenB.allowance(msg.sender, address(this)) >= amountB, "Insufficient allowance for tokenB");
+
+        uint256 share = calculateShare(amountA, amountB);
+        require(share > 0, "Invalid liquidity share");
+
+        tokenA.transferFrom(msg.sender, address(this), amountA);
+        tokenB.transferFrom(msg.sender, address(this), amountB);
+
+        totalLiquidity = totalLiquidity.add(share);
+        userLiquidity[msg.sender] = userLiquidity[msg.sender].add(share);
+
+        emit LiquidityAdded(msg.sender, share);
+    }
+
+    function withdrawLiquidity(uint256 liquidityAmount) external {
+        require(userLiquidity[msg.sender] >= liquidityAmount, "Insufficient user liquidity");
+
+        uint256 shareA = liquidityAmount.mul(tokenA.balanceOf(address(this))).div(totalLiquidity);
+        uint256 shareB = liquidityAmount.mul(tokenB.balanceOf(address(this))).div(totalLiquidity);
+
+        totalLiquidity = totalLiquidity.sub(liquidityAmount);
+        userLiquidity[msg.sender] = userLiquidity[msg.sender].sub(liquidityAmount);
+
+        tokenA.transfer(msg.sender, shareA);
+        tokenB.transfer(msg.sender, shareB);
+
+        emit LiquidityRemoved(msg.sender, liquidityAmount);
+    }
+
+    function calculateShare(uint256 amountA, uint256 amountB) internal view returns (uint256) {
+        uint256 balanceA = tokenA.balanceOf(address(this));
+        uint256 balanceB = tokenB.balanceOf(address(this));
+
+        return amountA.mul(balanceB).add(amountB.mul(balanceA)).div(balanceA.add(amountA)).div(balanceB.add(amountB));
+    }
+
+    function transferOwnership(address newOwner) external onlyOwner {
+        owner = newOwner;
+    }
+}
