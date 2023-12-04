@@ -1,0 +1,74 @@
+import starknet;
+
+contract LiquidityPool {
+    starknet.StorageSlot!({
+        user: felt,
+        tokenA_balance: felt,
+        tokenB_balance: felt,
+        totalShares: felt,
+        userShares: felt
+    });
+
+    public (user: felt) func initialize() {
+        // Initialize the contract
+        self.storage.user = tx.origin;
+        self.storage.tokenA_balance = 0;
+        self.storage.tokenB_balance = 0;
+        self.storage.totalShares = 0;
+        self.storage.userShares = 0;
+    }
+
+    public (tokenA_amount: felt, tokenB_amount: felt, shares: felt) func addLiquidity(tokenA_amount: felt, tokenB_amount: felt) {
+        // Add liquidity and issue shares
+        assert(tokenA_amount > 0 && tokenB_amount > 0, "Invalid liquidity amounts");
+        
+        self.storage.tokenA_balance += tokenA_amount;
+        self.storage.tokenB_balance += tokenB_amount;
+
+        let totalLiquidity = self.storage.tokenA_balance + self.storage.tokenB_balance;
+        let sharesToIssue = totalLiquidity - self.storage.totalShares;
+
+        self.storage.totalShares = totalLiquidity;
+        self.storage.userShares += sharesToIssue;
+
+        // Return the amounts and shares issued
+        return (tokenA_amount, tokenB_amount, sharesToIssue);
+    }
+
+    public (tokenA_amount: felt, tokenB_amount: felt, shares: felt) func removeLiquidity(sharesToRedeem: felt) {
+        // Remove liquidity and redeem shares
+        assert(sharesToRedeem > 0 && sharesToRedeem <= self.storage.userShares, "Invalid share amount");
+
+        let sharesRatio = sharesToRedeem / self.storage.totalShares;
+
+        let tokenA_amount = self.storage.tokenA_balance * sharesRatio;
+        let tokenB_amount = self.storage.tokenB_balance * sharesRatio;
+
+        self.storage.tokenA_balance -= tokenA_amount;
+        self.storage.tokenB_balance -= tokenB_amount;
+        self.storage.totalShares -= sharesToRedeem;
+        self.storage.userShares -= sharesToRedeem;
+
+        // Return the amounts and shares redeemed
+        return (tokenA_amount, tokenB_amount, sharesToRedeem);
+    }
+
+    public (tokenA_balance: felt, tokenB_balance: felt, userShares: felt) view func getLiquidity() -> (felt, felt, felt) {
+        // Get current liquidity and user shares
+        return (self.storage.tokenA_balance, self.storage.tokenB_balance, self.storage.userShares);
+    }
+
+    public (tokenB_received: felt) func swapTokenAForTokenB(tokenA_amount: felt) {
+        // Swap token A for token B
+        assert(self.storage.tokenA_balance >= tokenA_amount, "Insufficient liquidity");
+        let tokenB_amount = calculateSwapAmount(tokenA_amount);
+        self.storage.tokenA_balance -= tokenA_amount;
+        self.storage.tokenB_balance += tokenB_amount;
+    }
+
+    private (tokenB_amount: felt) func calculateSwapAmount(tokenA_amount: felt) -> felt {
+        // Calculate the amount of token B to be received
+        // You can use your own swapping algorithm here
+        return tokenA_amount * 2;
+    }
+}
